@@ -8,13 +8,13 @@ export const handler = async (ctx: AppContext, params: QueryParams) => {
   let builder = ctx.db
     .selectFrom('post')
     .selectAll()
-    .orderBy('indexedAt', 'desc')
+    .orderBy('createdAt', 'desc')
     .orderBy('cid', 'desc')
     .limit(params.limit)
 
   if (params.cursor) {
     const timeStr = new Date(parseInt(params.cursor, 10)).toISOString()
-    builder = builder.where('post.indexedAt', '<', timeStr)
+    builder = builder.where('post.createdAt', '<', timeStr)
   }
   const res = await builder.execute()
 
@@ -25,7 +25,7 @@ export const handler = async (ctx: AppContext, params: QueryParams) => {
   let cursor: string | undefined
   const last = res.at(-1)
   if (last) {
-    cursor = new Date(last.indexedAt).getTime().toString(10)
+    cursor = new Date(last.createdAt).getTime().toString(10)
   }
 
   return {
