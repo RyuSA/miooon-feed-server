@@ -9,6 +9,7 @@ import { createDb, Database, migrateToLatest } from './db'
 import { FirehoseSubscription } from './subscription'
 import { AppContext, Config } from './config'
 import wellKnown from './well-known'
+import { FeedGeneratorMetrics } from './metrics'
 
 export class FeedGenerator {
   public app: express.Application
@@ -32,7 +33,8 @@ export class FeedGenerator {
   static create(cfg: Config) {
     const app = express()
     const db = createDb(cfg.sqliteLocation)
-    const firehose = new FirehoseSubscription(db, cfg.subscriptionEndpoint)
+    const metrics = new FeedGeneratorMetrics()
+    const firehose = new FirehoseSubscription(db, cfg.subscriptionEndpoint, metrics)
 
     const didCache = new MemoryCache()
     const didResolver = new DidResolver({
@@ -57,6 +59,9 @@ export class FeedGenerator {
     describeGenerator(server, ctx)
     app.use(server.xrpc.router)
     app.use(wellKnown(ctx))
+    app.get('/metrics', (_req, res) => {
+      res.json(metrics.getMetrics())
+    })
 
     return new FeedGenerator(app, db, firehose, cfg)
   }

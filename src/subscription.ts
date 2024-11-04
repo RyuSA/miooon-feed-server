@@ -3,13 +3,14 @@ import {
   OutputSchema as RepoEvent,
   isCommit,
 } from './lexicon/types/com/atproto/sync/subscribeRepos'
+import { FeedGeneratorMetrics } from './metrics';
 import { FirehoseSubscriptionBase, getOpsByType } from './util/subscription'
 
 export class FirehoseSubscription extends FirehoseSubscriptionBase {
 
   private filterChain: FilterChain;
 
-  constructor(public db, public service, filterChain?: FilterChain) {
+  constructor(public db, public service, private metrics: FeedGeneratorMetrics, filterChain?: FilterChain) {
     super(db, service);
     this.filterChain = filterChain || MioFilter;
   }
@@ -17,9 +18,12 @@ export class FirehoseSubscription extends FirehoseSubscriptionBase {
   async handleEvent(evt: RepoEvent) {
     if (!isCommit(evt)) return;
     const ops = await getOpsByType(evt);
-
     const postsToDelete = ops.posts.deletes.map((del) => del.uri);
-    const prePostsToCreate = ops.posts.creates.filter((create) => this.filterChain.apply(create.record));
+    const prePostsToCreate = ops.posts.creates.filter((create) => {
+      this.metrics.incrementFeedCount();
+      this.metrics.setLastFeedGenerationTime(new Date(create.record.createdAt).getTime());  
+      return this.filterChain.apply(create.record)
+    });
 
     const postsToCreate = prePostsToCreate
       .sort((a, b) => new Date(a.record.createdAt).getTime() - new Date(b.record.createdAt).getTime())
@@ -38,6 +42,7 @@ export class FirehoseSubscription extends FirehoseSubscriptionBase {
     }
 
     if (postsToCreate.length > 0) {
+      console.log(`Inserting ${JSON.stringify(postsToCreate)}`);
       await this.db
         .insertInto('post')
         .values(postsToCreate)
